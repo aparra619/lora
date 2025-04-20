@@ -1,7 +1,8 @@
 from machine import Pin, UART
-from time import sleep_ms
+from time import sleep_ms, sleep_us
 
-class RYLR896:
+
+class LORA:
     def __init__(self, port_num, baud_rate=115200, tx_pin=None, rx_pin=None):
         if tx_pin is None and rx_pin is None:
             self._uart = UART(port_num, baudrate=baud_rate)  
@@ -14,7 +15,7 @@ class RYLR896:
         while(self._uart.any()==0):
             pass
         reply = self._uart.readline()
-        print(reply.decode().strip('\r\n'))
+        print(reply.decode().strip())
     
     def test(self):
         self._uart.write('AT\r\n')
@@ -22,15 +23,13 @@ class RYLR896:
         while(self._uart.any()==0):
             pass
         reply = self._uart.readline()
-        print(reply.decode().strip('\r\n'))
+        print(reply.decode().strip())
 
     def set_addr(self, addr):
         self._uart.write('AT+ADDRESS={}\r\n'.format(addr))
         sleep_ms(50)
-        while(self._uart.any()==0):
-            pass
-        reply = self._uart.readline()
-        print(reply.decode().strip('\r\n'))
+        reply = self._uart.readline(5000)
+        print(reply.decode().strip())
         print('Address set to: {}\r\n'.format(addr))
 
 
@@ -42,6 +41,7 @@ class RYLR896:
         reply = self._uart.readline()
         print(reply.decode().strip('\r\n'))
         
+        
     def read_msg(self):
         if self._uart.any()==0:
             print('No Messages.')
@@ -50,7 +50,7 @@ class RYLR896:
             while(self._uart.any()):
                 msg = msg + self._uart.read(self._uart.any()).decode()
                 sleep_ms(10)
-                
+            print(msg.size())
             msg = msg.strip('\r\n')
             clean_msg = msg.replace("+RCV=", "")
             parts = clean_msg.split(',')
@@ -63,7 +63,6 @@ class RYLR896:
             
             print("Rcv from Addr: {}\r\nMsg Length: {}\r\nRSSI: {}\r\nSNR: {}\r\nMsg: {}\r\n".format(addr_recv_from,msg_len,msg_RSSI,msg_SNR,msg_str))
 
-    
 # led = Pin(25, Pin.OUT)
 # 
 # for x in range(5):
@@ -82,8 +81,49 @@ class RYLR896:
 # else:
 #     print("No data received")
 
-lora = RYLR896(0, baud_rate=115200, tx_pin=Pin(0), rx_pin=Pin(1)) 
-sleep_ms(1000)
-lora.set_addr(2)  
+relay_ctrl_sig = 0
+interrupt_triggered = False
+    
+    
+#     print("RCV MSG")
+#     power_relay_handler()
+    
+# def power_relay_handler():
+#     if relay_ctrl_sig == 1:
+#         print("Hey I am ON")
+#     else:
+#         print("Hey I am OFF")
+    
+lora = LORA(0, baud_rate=115200, tx_pin=Pin(0), rx_pin=Pin(1)) 
+sleep_ms(10)
+lora.set_addr(2)
+
+UART_buffer = ""
+def rx_handler(pin):
+    global UART_buffer
+    while(lora._uart.any()):
+        char = uart.read(1).decode()
+        UART_buffer += char
+        #sleep_ms(10)
+        if char == '\n':
+            print(UART_buffer)
+            UART_buffer = ""
+    if relay_ctrl.value() == 0:
+        relay_ctrl.value(1)
+        print("ON")
+    else:
+        relay_ctrl.value(0)
+        print("OFF")
+        
+    
 
 
+gpio_interrupt = machine.Pin(1, machine.Pin.IN, machine.Pin.PULL_DOWN)
+gpio_interrupt.irq(trigger=machine.Pin.IRQ_RISING,handler=rx_handler)
+
+relay_ctrl = machine.Pin(2, machine.Pin.OUT)
+
+
+
+while True:
+    machine.idle()
